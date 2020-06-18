@@ -1,0 +1,23 @@
+{
+  "name": "extend-warranty-solution",
+  "version": "1.0.0",
+  "main": "suitecloud.config.js",
+  "scripts": {
+    "build-deploy": "suitecloud project:adddependencies && suitecloud project:validate && suitecloud project:deploy",
+    "deploy": "suitecloud project:deploy",
+    "update": "suitecloud object:update -i"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mdraperamp/extend-warranty-solution.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mdraperamp/extend-warranty-solution/issues"
+  },
+  "homepage": "https://github.com/mdraperamp/extend-warranty-solution#readme",
+  "dependencies": {},
+  "description": ""
+}

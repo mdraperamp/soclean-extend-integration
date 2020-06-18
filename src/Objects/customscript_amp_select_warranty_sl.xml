@@ -1,0 +1,26 @@
+<suitelet scriptid="customscript_amp_select_warranty_sl">
+  <description></description>
+  <isinactive>F</isinactive>
+  <name>AMP Extend - Presentation SL</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/ExtendWarrantyModule/Suitelet/customscript_amp_select_warranty_sl.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_amp_select_warranty_sl">
+      <allemployees>T</allemployees>
+      <allpartners>F</allpartners>
+      <allroles>T</allroles>
+      <auddepartment></auddepartment>
+      <audslctrole></audslctrole>
+      <eventtype></eventtype>
+      <isdeployed>T</isdeployed>
+      <isonline>F</isonline>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>RELEASED</status>
+      <title>AMP Extend - Warranty Presentation SL</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>

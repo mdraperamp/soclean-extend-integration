@@ -47,7 +47,7 @@ function(url, search) {
         });
 
         var bIsWarranty = false;
-
+        // Lookup to item to see if it is eligible for warranty offers
         var objItemLookup = search.lookupFields({
             type: 'serializedinventoryitem',
             id: stItemId,
@@ -57,25 +57,19 @@ function(url, search) {
         bIsWarranty = objItemLookup.custitem_amp_is_warranty;
 
         log.debug('Is warranty', typeof(bIsWarranty) + ', ' + bIsWarranty);
-
+        // If item is not a warranty item, return
         if(!bIsWarranty){
             return true;
         }
-        const stItemName = objCurrentRecord.getCurrentSublistText({
-            sublistId: context.sublistId,
-            fieldId: 'item'
-        });
+
         //Resolve suitelet URL
         var slUrl = url.resolveScript({
             scriptId: 'customscript_amp_select_warranty_sl',
             deploymentId: 'customdeploy_amp_select_warranty_sl',
             params: {
-                'stItemId' : stItemName,
                 'stItemInternalId' : stItemId
             }
         });
-
-        log.debug(JSON.stringify(slUrl));
 
         //Call the pop up suitelet
         window.open(slUrl,'_blank','screenX=300,screenY=300,width=900,height=300,titlebar=0,status=no,menubar=no,resizable=0,scrollbars=0');

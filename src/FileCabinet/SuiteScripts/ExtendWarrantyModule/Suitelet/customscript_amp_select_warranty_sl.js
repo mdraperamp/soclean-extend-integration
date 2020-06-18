@@ -1,10 +1,9 @@
 /**
  *@description: 
  *  Suitelet called by Sales Order client script to display warrant products
- *  in a popup window. This script makes an outbound api call to the GET plans
- *  Extend API and displays the available warranty products. The user can then
- *  select a warranty and on submit, the suitelet will post and append a new 
- *  line for the Warranty non inventory item with the description and pricing. 
+ *  in a popup window. The user can then select a warranty and on submit, 
+ *  the suitelet will post and append a new line for the Warranty non-inventory item 
+ *  with the description and pricing. 
  *  
  *@copyright Aimpoint Technology Services, LLC
  *@author Michael Draper
@@ -14,15 +13,13 @@
  */
 define([
     'N/ui/serverWidget',
+    'N/search',
     'N/http',
-    '../Libs/customscript_amp_item_api'
+    'N/error',
+    '../Libs/customscript_amp_util'
 ], 
-(ui, http, api) => {
+(ui, search, http, error, util) => {
     const exports = {};
-    //List of non inventory items for warranty listing on Saled Transactions
-    const objNonInvItems = {
-        "GENERIC" : 2589
-    };
 
     exports.onRequest = context => {
         var objEventRouter = {};
@@ -38,6 +35,7 @@ define([
         
         renderForm(context);
     }
+    // Post Handler
     handlePost = context => {
 
         log.debug('POST: Context Object', JSON.stringify(context));
@@ -45,42 +43,30 @@ define([
         const request = context.request;
         const planCount = request.getLineCount({group: 'custpage_plans'});
         
-        var stPlanId = '';
-        var flPrice = 0;
         var stItemId = '';
-
+        // Get line information from selected line
         for(let i=0; i < planCount; i++){
 
             let isSelected = request.getSublistValue({group: 'custpage_plans', name: 'custpage_select', line: i}) == "T" ? true : false;
-            log.debug('Is Selected Checkbox Value', isSelected);
 
             if(isSelected){
 
                 stItemId = request.getSublistValue({group: 'custpage_plans', name: 'custpage_item_id', line: i});
-                stPlanId = JSON.stringify(request.getSublistValue({group: 'custpage_plans', name: 'custpage_plan_id', line: i}));
-                stTitle = request.getSublistValue({group: 'custpage_plans', name: 'custpage_plan_title', line: i});
-                intTerm = request.getSublistValue({group: 'custpage_plans', name: 'custpage_plan_term', line: i});
-                flPrice = request.getSublistValue({group: 'custpage_plans', name: 'custpage_plan_price', line: i});
                 break;
             }
         }
-        log.debug('Values', `planId: ${stPlanId}, term: ${intTerm}, price: ${flPrice}`);
-
+        // Prepare window.opener html to post values back to the line
         var html = '<html>';
         html += ' <body>';
         html += ' <script language="JavaScript">';
         html += ' if(window.opener) {';
-        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${objNonInvItems.GENERIC}, true, true);`;
-        // html += ` window.opener.nlapiSetCurrentLineItemValue("item", "description", ${stTitle}, false);`;
-        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "rate", ${flPrice}, true);`;
-        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "custcol_amp_extend_plan_id", ${stPlanId}, true);`;
-        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "custcol_amp_extend_item_sku", ${stItemId}, true);`;
+        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${stItemId}, true, true);`;
         html += ' };';
         html += ' window.close();';
         html += ' </script>';
         html += ' </body>';
         html += '</html>';
-
+        // Write repsponse
         context.response.write(html);
     }
     handleError = context => {
@@ -91,11 +77,11 @@ define([
             notifyOff: true
         });
     }
+    // Builds Suitelet Form
     renderForm = context => {
 
         log.debug('POST Params', context.request.parameters);
         // Get plans and populate sublist
-        const stItemId = context.request.parameters.stItemId;
         const stItemInternalId = context.request.parameters.stItemInternalId;
 
         // Create the form
@@ -115,28 +101,17 @@ define([
             label : 'Select'
         });
         var objItemIdField = objPlanList.addField({
-            id : 'custpage_item_id',
-            type : ui.FieldType.INTEGER,
-            label : 'Item'
+            id: 'custpage_item_id',
+            type: ui.FieldType.INTEGER,
+            label: 'ID'
         });
-        objItemIdField.defaultValue = stItemInternalId;
         objItemIdField.updateDisplayType({
             displayType: ui.FieldDisplayType.HIDDEN
-        });
-        objPlanList.addField({
-            id: 'custpage_plan_id',
-            type: ui.FieldType.TEXT,
-            label: 'ID'
         });
         objPlanList.addField({
             id: 'custpage_plan_title',
             type: ui.FieldType.TEXT,
             label: 'Title'
-        });
-        objPlanList.addField({
-            id: 'custpage_plan_term',
-            type: ui.FieldType.INTEGER,
-            label: 'Term'
         });
         objPlanList.addField({
             id: 'custpage_plan_price',
@@ -145,35 +120,37 @@ define([
         });
         // Add Submit Button
         objForm.addSubmitButton('Submit');
-        // Call Plan API to get list of plans by item
-        const objPlans = api.getPlansByItem(stItemId);
-        log.debug('Response from Plan API', objPlans);
+
+        // Search for warranty items for the give inventory item
+        var arrFilters = [];
+        arrFilters.push(search.createFilter({name: 'custitem_amp_ext_inv_sku', operator: 'anyof', values: [stItemInternalId]}));
         
-        const arrPlans = objPlans.plans;
+        var arrColumns = [];
+        arrColumns.push(search.createColumn({name: 'internalid'}));
+        arrColumns.push(search.createColumn({name: 'salesdescription'}));
+        arrColumns.push(search.createColumn({name: 'baseprice'}));
+        
+        var arrPlans = util.search('item', null, arrFilters, arrColumns);
+
         log.debug('Array of Plans', arrPlans);
         
         //Populate Sublist Values
         for(let i =0; i < arrPlans.length; i++){
 
             objPlanList.setSublistValue({
-                id: 'custpage_plan_id',
+                id: 'custpage_item_id',
                 line: i,
-                value: arrPlans[i].id
+                value: arrPlans[i].getValue({name: 'internalid'})
             });
             objPlanList.setSublistValue({
                 id: 'custpage_plan_title',
                 line: i,
-                value: arrPlans[i].title
-            });
-            objPlanList.setSublistValue({
-                id: 'custpage_plan_term',
-                line: i,
-                value: arrPlans[i].contract.termLength
+                value: arrPlans[i].getValue({name: 'salesdescription'})
             });
             objPlanList.setSublistValue({
                 id: 'custpage_plan_price',
                 line: i,
-                value: parseFloat(arrPlans[i].price / 100)
+                value: parseFloat(arrPlans[i].getValue({name: 'baseprice'}))
             });
         }
         //Set Client handler

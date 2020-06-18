@@ -1,4 +1,13 @@
 <manifest projecttype="ACCOUNTCUSTOMIZATION">
   <projectname>extend</projectname>
   <frameworkversion>1.0</frameworkversion>
+  <dependencies>
+    <features>
+      <feature required="false">ASSEMBLIES</feature>
+      <feature required="true">SERVERSIDESCRIPTING</feature>
+      <feature required="false">CRM</feature>
+      <feature required="false">INVENTORY</feature>
+      <feature required="false">DEPARTMENTS</feature>
+    </features>
+  </dependencies>
 </manifest>

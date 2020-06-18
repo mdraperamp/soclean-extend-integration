@@ -12,12 +12,8 @@ define([
     /**
      * CREATE PRODUCT
      * API Documentation: https://developers.extend.com/default#tag/Products/paths/~1stores~1{storeId}~1products/post
-     * @param description
-     * @param price
-     * @param title
-     * @param referenceId
+     * 
      */
-
     exports.createProduct = (objProductDetails) => {
         
         log.debug('Extend Product Details', objProductDetails);
@@ -51,10 +47,7 @@ define([
     /**
      * UPDATE PRODUCT
      * API Documentation: https://developers.extend.com/default#tag/Products/paths/~1stores~1{storeId}~1products~1{productId}/put
-     * @param description
-     * @param price
-     * @param title
-     * @param referenceId
+     * 
      */
     exports.updateProduct = (objProductDetails, stItemId) => {
         
@@ -90,8 +83,7 @@ define([
     /**
      * DELETE PRODUCT
      * API Documentation: https://developers.extend.com/default#tag/Products/paths/~1stores~1{storeId}~1products~1{productId}/delete
-     * Params
-     * @param param contractId
+     * 
      */
     exports.deleteProduct = async (stItemId) => {
         try {
@@ -114,10 +106,7 @@ define([
     /**
      * FETCH PLANS BY ITEM
      * API Documentation: https://developers.extend.com/default#operation/getOffer
-     * @param description
-     * @param price
-     * @param title
-     * @param referenceId
+     * 
      */
     exports.getPlansByItem = (stItemId) => {
         try {
@@ -141,15 +130,6 @@ define([
      * CREATE WARRANTY CONTRACT
      * API Documentation: https://developers.extend.com/default#operation/createContracts
      * 
-     *  "*" is a required parameter and/or key/value pair
-     * Params
-     * @param transactionId*
-     * @param transactionTotal*
-     * @param customer* {phone, email*, name*, address}
-     * @param product* {referenceId*, purchasePrice*, serialNumber}
-     * @param currency*
-     * @param transactionDate*
-     * @param plan* {pruchasePrice*, planId*}
      */
     exports.createWarrantyContract = (objContractDetails) => {
         try {
@@ -158,9 +138,10 @@ define([
                 headers: {
                     'Content-Type' : 'application/json',
                     'X-Extend-Access-Token' : JSON.stringify(config.key)
-                }
+                },
+                body: JSON.stringify(objContractDetails)
             });
-            if(response){
+            if(response.code === 201){
                 return JSON.parse(response.body);
             }
         } catch(e) {
@@ -172,7 +153,7 @@ define([
     /**
      * CANCEL WARRANTY CONTRACT
      * API Documentation: https://developers.extend.com/default#operation/refundContract
-     * @param contractId
+     * 
      */
     exports.cancelWarrantyContract = async (contractId) => {
         try {

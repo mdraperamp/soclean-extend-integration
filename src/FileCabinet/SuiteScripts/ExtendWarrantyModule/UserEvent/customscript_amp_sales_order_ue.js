@@ -1,5 +1,9 @@
 /**
- *@description: 
+ *@description: This script is triggered on creation of sales orders
+ * via the UI or Ziftr cart, iterates through the lines and identifies
+ * warranty items. If this is a warranty order then it is flagged to be
+ * queued for Extend Contract creation via the AMP Extend - Create Contracts MR
+ * mapreduce script.
  *    
  *@copyright Aimpoint Technology Services, LLC
  *@author Michael Draper
@@ -10,30 +14,46 @@
  */
 define([
     'N/search',
+    'N/runtime',
     '../Libs/customscript_amp_util',
 ], 
-(search, util) => {
+(search, runtime, util) => {
     var exports = {};
     exports.beforeSubmit = context => {
+        log.debug('Exexction Context', runtime.executionContext);
+        
+        // Only execute for orders created via userinterface and webservices
+        if(['USERINTERFACE', 'WEB_SERVICES'].indexOf(runtime.executionContext) == -1){
+            return;
+        }
         const objNewRecord = context.newRecord;
        
         try {
             const stItemLineCount = objNewRecord.getLineCount({sublistId: 'item'});
-            objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
-
+            objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: false});
+            // Iterate through the lines to check if the inventory item is associated with a 
+            // warranty item sku. If so, flag the order and break
+            log.debug('Item', stItemLineCount);
             for(let i = 0; i < stItemLineCount; i++){
+                log.debug('Item', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
                 var arrFieldLookup = search.lookupFields({
                     type: 'item',
-                    id: objNewRecord.getSublistValue({sublistid: 'item', fieldId: 'item'}),
-                    columns: ['type', 'custitem_amp_ext_sku']
+                    id: objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}),
+                    columns: ['type', 'custitem_amp_ext_inv_sku']
                 });
-                if(arrFieldLookup.indexOf('noninventoryitem') > -1 && util.isNotEmpty(arrFieldLookup.custitem_amp_ext_sku)){
-                    objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
-                    break;
+                const stItemType = arrFieldLookup.type[0].value;
+                if(stItemType === 'NonInvtPart'){
+                    const stSkuId = arrFieldLookup.custitem_amp_ext_inv_sku[0].value;
+                    const stContractId = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
+                    log.debug('Contract ID', stContractId);
+                    if(util.isNotEmpty(stSkuId) && !stContractId){   
+                        objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
+                        break;
+                    }
                 }
             }
         } catch(e) {
-            log.debug('Extend: Error Setting Extend Field for Job', JSON.stringify(e));
+            log.debug('Extend: Error Setting Extend Field for Job', JSON.stringify(e.message));
         }
     };
     return exports;

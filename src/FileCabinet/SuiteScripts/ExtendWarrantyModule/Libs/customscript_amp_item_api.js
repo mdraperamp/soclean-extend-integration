@@ -20,8 +20,6 @@ define([
 
         try {
             let url = `${config.domain}/stores/${config.storeId}/products`;
-
-            log.debug('Calling URL to Create Products', 'url: ' + url + ', Body: ' + JSON.stringify(objProductDetails));
             
             const response = https.post({
                 url: url,
@@ -56,8 +54,6 @@ define([
         try {
             let url = `${config.domain}/stores/${config.storeId}/products/${stItemId}`;
 
-            log.debug('Calling URL to Create Products', 'url: ' + url + ', Body: ' + JSON.stringify(objProductDetails));
-            
             const response = https.put({
                 url: url,
                 headers: {
@@ -91,7 +87,7 @@ define([
                 url: `${config.domain}/stores/${config.storeId}/products/${stItemId}`,
                 headers: {
                     'Content-Type' : 'application/json',
-                    'X-Extend-Access-Token' : JSON.stringify(config.key)
+                    'X-Extend-Access-Token' : config.key
                 }
             });
             if(response){
@@ -114,7 +110,7 @@ define([
                 url: `${config.domain}/offers?storeId=${config.storeId}&productId=${stItemId}`,
                 headers: {
                     'Content-Type' : 'application/json',
-                    'X-Extend-Access-Token' : JSON.stringify(config.key)
+                    'X-Extend-Access-Token' : config.key
                 }
             });
             if(response){
@@ -133,19 +129,23 @@ define([
      */
     exports.createWarrantyContract = (objContractDetails) => {
         try {
-            const response = https.get({
+            const response = https.post({
                 url: `${config.domain}/stores/${config.storeId}/contracts`,
                 headers: {
+                    'Accept' : 'application/json',
                     'Content-Type' : 'application/json',
-                    'X-Extend-Access-Token' : JSON.stringify(config.key)
+                    'X-Extend-Access-Token' : config.key
                 },
                 body: JSON.stringify(objContractDetails)
             });
             if(response.code === 201){
                 return JSON.parse(response.body);
+            } else {
+                log.debug('Error Creating Contract', JSON.stringify(response));
+                return {};
             }
         } catch(e) {
-            log.debug('Error Creating Contract', JSON.stringify(e.message));
+            log.debug('Error Calling API', JSON.stringify(e.message));
             return;
         }
     
@@ -161,7 +161,7 @@ define([
                 url: `${config.domain}/stores/${config.storeId}/contracts/${contractId}/refund`,
                 headers: {
                     'Content-Type' : 'application/json',
-                    'X-Extend-Access-Token' : JSON.stringify(config.key)
+                    'X-Extend-Access-Token' : config.key
                 }
             });
             if(response){

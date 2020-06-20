@@ -1,9 +1,11 @@
 /**
  *@description: 
- *  Scheduled script that is called from by a sales order
- *  that has been created with warranty items. This script is
- *  passed those items as parameters and a warranty contract
- *  is then created for each product in the Extend store.  
+ *  Mapreduce script that runs on a scheduled basis
+ *  to pulled newly created SO's with warranty items
+ *  and create Extend warranty contracts for them. The 
+ *  script creates the contract in Extend and writes
+ *  the contract ID back to the warranty item column
+ *  Extend Contract ID  
  * 
  *@copyright Aimpoint Technology Services, LLC
  *@author Michael Draper
@@ -13,11 +15,11 @@
  *@ModuleScope Public
  */
 define([
+    'N/record',
     '../Libs/customscript_amp_util',
-    '../Libs/customscript_amp_item_api',
-    '../Libs/customscript_amp_lib_keys'
+    '../Libs/customscript_amp_item_api'
 ], 
-(util, api, config) => {
+(record, util, api) => {
     
     var exports = {};
 
@@ -26,7 +28,7 @@ define([
         try {
             
             var objSalesOrders = getSalesOrderDetails();
-            log.debug('Orders', objSalesOrders);
+            log.debug('GET INPUT DATA: Orders', objSalesOrders);
             return objSalesOrders;
 
         } catch(e){
@@ -44,13 +46,21 @@ define([
     // Iterate through context and create Extend warranty
     exports.reduce = context => {
         try {
-            const stOrderId = context.key;
             const objValues = JSON.parse(context.values[0]);
+            const stOrderId = objValues.id;
             const objExtendJSON = buildExtendJSON(objValues);
-
             log.debug('REDUCE: JSON Request Payload for ' + stOrderId, JSON.stringify(objExtendJSON));
-            // const response = api.createContract(objExtendJSON);
-
+            
+            // Call Extend API to create the warrant contract
+            const objResponse = api.createWarrantyContract(objExtendJSON);
+            log.debug('REDUCE: JSON Response Payload for ' + stOrderId, objResponse);
+            
+            // If contract is created, write the contract ID and Item Serial number 
+            // back to the Sales Order line
+            if(objResponse.id){
+                const stContractId = objResponse.id;
+                updateSalesOrder(stOrderId, objValues, stContractId);
+            }
 
         } catch(e){
             log.debug('ERROR in REDUCE stage', e);
@@ -59,37 +69,38 @@ define([
     exports.summarize = summary => {
 
     };
-    //Get all sales orders that are in need of Extend contract
+    // Get all sales orders that are in need of Extend contract
     const getSalesOrderDetails = () => {
 
         var arrSearchResults = util.search('transaction', 'customsearch_amp_extend_ex_serial_line');
         var objResults = {};
         var stSerialNumber = '';
-        var flPurchasePrice = '';
+        var flPurchasePrice = 0;
         
         // Loop through results and build context object containing all the necessary
         // data per line
         for(let i = 0; i < arrSearchResults.length; i++){
 
             var stItemType = arrSearchResults[i].getValue({name: 'type', join: 'item'});
-
             // Get the purchase price and serial number for the inventory item
-            if(stItemType != 'NonInvtPart'){
-                stSerialNumber = arrSearchResults[i].getValue({name: 'serialnumber'});
-                flPurchasePrice = parseFloat(arrSearchResults[i].getValue({name: 'amount'}));
+            if(stItemType !== 'NonInvtPart'){
+                stSerialNumber = arrSearchResults[i].getValue({name: 'serialnumbers', join: 'fulfillingTransaction'});
+                flPurchasePrice = arrSearchResults[i].getValue({name: 'amount'});
                 continue;
             }
             // Build context object
             var stOrderId = arrSearchResults[i].id;
             var stLineNumber = arrSearchResults[i].getValue({name: 'linesequencenumber'});
+            var objTranDate = new Date(arrSearchResults[i].getValue({name: 'trandate'}));
+            objTranDate = objTranDate.getTime() / 1000;
+
             const stKey = `${stOrderId}_${stLineNumber}`;
             
             objResults[stKey] = {};
             objResults[stKey].id = stOrderId;
-            objResults[stKey].tran_date = arrSearchResults[i].getValue({name: 'trandate'});
+            objResults[stKey].line = stLineNumber;
+            objResults[stKey].tran_date = objTranDate;
             objResults[stKey].purchase_price = flPurchasePrice;
-            objResults[stKey].item_amount = arrSearchResults[i].getValue({name: 'amount'});
-            objResults[stKey].total_amount = arrSearchResults[i].getValue({name: 'total'});
             objResults[stKey].currency = getCurrencyCode(arrSearchResults[i].getValue({name: 'currency'}));
             objResults[stKey].order_number = arrSearchResults[i].getValue({name: 'tranid'});
             objResults[stKey].serial_number = stSerialNumber;
@@ -97,7 +108,7 @@ define([
             objResults[stKey].extend_sku = arrSearchResults[i].getText({name: 'custitem_amp_ext_inv_sku', join: 'item'});
             objResults[stKey].line_amount = arrSearchResults[i].getValue({name: 'amount'});
             objResults[stKey].total_amount = arrSearchResults[i].getValue({name: 'total'});
-            objResults[stKey].name = arrSearchResults[i].getText({name: 'entity'});
+            objResults[stKey].name = arrSearchResults[i].getText({name: 'entity'}).replace(/[0-9]/g, '');
             objResults[stKey].email = arrSearchResults[i].getValue({name: 'email'});
             objResults[stKey].bill_phone = arrSearchResults[i].getValue({name: 'billphone'});
             objResults[stKey].bill_address = arrSearchResults[i].getValue({name: 'billaddress1'});
@@ -120,48 +131,73 @@ define([
     };
     const buildExtendJSON = objValues => {
         var objJSON = {
-            "transactionId": objValues.id,
-            "transactionDate": objValues.tran_date,
-            "transactionTotal": {
-                "amount": objValues.total_amount,
-                "currencyCode": objValues.currency
-            },
-            "poNumber": objValues.order_number,
-            "customer": {
-                "email": objValues.email,
-                "name": objValues.name,
-                "phone": objValues.phone,
-                "billingAddress": {
-                    "address1": objValues.bill_address,
-                    "city": objValues.bill_city,
-                    "provinceCode": objValues.bill_state,
-                    "countryCode": objValues.bill_country,
-                    "postalCode": objValues.bill_zip
+            'transactionId': objValues.id,
+            'transactionDate': objValues.tran_date,
+            'transactionTotal': objValues.total_amount.replace('.', ''),
+            'currency' : objValues.currency,
+            'poNumber': objValues.order_number,
+            'customer': {
+                'email': objValues.email,
+                'name': objValues.name,
+                'phone': objValues.phone,
+                'billingAddress': {
+                    'address1': objValues.bill_address,
+                    'city': objValues.bill_city,
+                    'provinceCode': objValues.bill_state,
+                    'countryCode': objValues.bill_country,
+                    'postalCode': objValues.bill_zip
                 },
-                "shippingAddress": {
-                    "address1": objValues.ship_address,
-                    "city": objValues.ship_city,
-                    "provinceCode": objValues.ship_state,
-                    "countryCode": objValues.ship_country,
-                    "postalCode": objValues.ship_zip
+                'shippingAddress': {
+                    'address1': objValues.ship_address,
+                    'city': objValues.ship_city,
+                    'provinceCode': objValues.ship_state,
+                    'countryCode': objValues.ship_country,
+                    'postalCode': objValues.ship_zip
                 }
             },
-            "product": {
-                "referenceId": objValues.extend_sku,
-                "purchasePrice": {
-                    "amount": objValues.purchasePrice,
-                    "currencyCode": objValues.currency
-                }
+            'product': {
+                'referenceId': objValues.extend_sku,
+                'purchasePrice': objValues.purchase_price.replace('.', ''),
+                'serialNumber' : objValues.serial_number
             },
-            "plan": {
-                "purchasePrice": {
-                    "amount": objValues.amount,
-                    "currencyCode": objValues.currency
-                },
-                "planId": objValues.extend_plan_id
+            'plan': {
+                'purchasePrice': objValues.line_amount.replace('.', ''),
+                'planId': objValues.extend_plan_id
             }
         };
         return objJSON;
+    };
+    const updateSalesOrder = (stOrderId, objValues, stContractId) => {
+        var objSalesOrder = record.load({
+            type: 'salesorder',
+            id: stOrderId,
+            isDynamic: true
+        });
+        log.debug('Line Number', objValues.line);
+        objSalesOrder.selectLine({
+            sublistId: 'item',
+            line: objValues.line - 1
+        });
+        // Write contract id from response
+        objSalesOrder.setCurrentSublistValue({
+            sublistId: 'item',
+            fieldId: 'custcol_amp_ext_contract_id',
+            value: stContractId
+        });
+        // Write serial number from the fufilled inventory item
+        objSalesOrder.setCurrentSublistValue({
+            sublistId: 'item',
+            fieldId: 'custcol_amp_ext_serial_number',
+            value: objValues.serial_number
+        });
+        objSalesOrder.commitLine({
+            sublistId: 'item'
+        });
+        objSalesOrder.setValue({
+            fieldId: 'custbody_amp_ext_to_be_processed',
+            value: false
+        });
+        objSalesOrder.save();
     };
     // Return mr functions
     return exports;

@@ -14,7 +14,7 @@ define([
     const objProd = {
         storeId: '',
         key : '',
-        domain: 'https://api.helloextend.com'
+        domain: ''
     };
 
     var objKeys = {};

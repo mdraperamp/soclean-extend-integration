@@ -34,6 +34,13 @@ function(url, search) {
         objEventRouter[context.sublistId](context);
         return true;
     };
+    exports.saveRecord = function(context){
+        log.debug('Saving Record Validation', context);
+
+        var bResult = validateWarranty(context);
+        return bResult;
+    };
+    
     function handleItemInput(context){
 
         log.debug('Handling Input', context);
@@ -49,7 +56,7 @@ function(url, search) {
         var bIsWarranty = false;
         // Lookup to item to see if it is eligible for warranty offers
         var objItemLookup = search.lookupFields({
-            type: 'serializedinventoryitem',
+            type: 'item',
             id: stItemId,
             columns: 'custitem_amp_is_warranty'
         });
@@ -75,6 +82,99 @@ function(url, search) {
         window.open(slUrl,'_blank','screenX=300,screenY=300,width=900,height=300,titlebar=0,status=no,menubar=no,resizable=0,scrollbars=0');
         
         return true;
+    }
+    function validateWarranty(context){
+
+        var objCurrentRec = context.currentRecord;
+		// var bSkuFound = false;
+        // var stWarrantyQuantity = 0;
+        // var stSkuQuantity = 0;
+        // var stOrderType = 'none';	
+		var patternSalesOrder = /^[S][O][0-9]{1,10}?$/;
+		var patternSerialNumber = /^[S][C][1][2][0][0][0-9]{1,11}?$/;
+		// var patternSku = /^[S][C][0-9]{4,4}?$/;
+	
+        //new code start
+        const stItemLineCount = objCurrentRec.getLineCount({sublistId: 'item'});
+        var stPreviousSkuQuant = 0;
+        var stPreviousSkuId = '';
+        var stPreviousSkuLine = 0;
+        // Iterate through the lines to check if the inventory item is associated with a 
+        // warranty item sku. If so, we need to gather information about the number of items
+        // in the list
+        for(var i = 0; i < stItemLineCount; i++){
+            var stItemId = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'item', line: i});
+           
+            var arrFieldLookup = search.lookupFields({
+                type: 'item',
+                id: stItemId,
+                columns: ['type', 'custitem_amp_ext_inv_sku', 'custitem_amp_is_warranty']
+            });
+            log.debug('Item Lookup', arrFieldLookup);
+            const stItemType = arrFieldLookup.type[0].value;
+            // If the item is inventory, check if it is a warranty item designated as LIVE
+            if(stItemType === 'InvtPart'){
+                const bIsWarranty = arrFieldLookup.custitem_amp_is_warranty;
+                if(bIsWarranty){
+                    // Item is live, get values for warranty compares downstream
+                    stPreviousSkuQuant = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i});
+                    stPreviousSkuId = stItemId;
+                    stPreviousSkuLine = i;
+                }
+            }
+
+            var stConfigSkuId = '';
+            if(stItemType === 'NonInvtPart'){
+
+                stConfigSkuId = arrFieldLookup.custitem_amp_ext_inv_sku[0].value;
+                const stContractId = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
+                
+                log.debug('Contract ID', stContractId);
+                // If a contract ID already exits (it shouldnt) skip this logic
+                if(stConfigSkuId && !stContractId){
+
+                    if(stPreviousSkuId == stConfigSkuId){
+                        // Order is not stand alone or contains associated SKU items. The warranty is covering the previous SKU
+                        if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: stPreviousSkuLine}) > 1){
+                            alert("Warranty Validation Alert: You must enter a quantity of 1 for items covered by warranty. Please ensure only 1 Warranty is being sold per SKU.");
+                            return false;
+                        }
+                        stPreviousSkuId = '';
+
+                    } else if(!stPreviousSkuId && stConfigSkuId){
+                        // Order is a stand alone order. No SKUS are associated with the warranty
+                        // Validate necessary fields are populated for the original order
+                        const stOrderNumber = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_warranty_order_num', line: i});
+                        const stOrderDate = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_original_order_date', line: i});
+                        const stOrderSerialNum = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_serial_number', line: i});
+                        if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i}) > 1){
+                            alert("Warranty Validation Alert: You must enter a quantity of 1 for a warranty. You may not purchase multiple warranties on a single line.");
+                            return false;
+                        }
+                        if(patternSalesOrder.test(stOrderNumber) == false) {
+                            alert("Warranty Validation Alert: ORDER NUMBER requires a valid NetSuite Sales Order Number for line: " + (i + 1) + ".");
+                            return false;
+                        }
+                        if(!stOrderDate) {
+                            alert("Warranty Validation Alert: ORIGINAL ORDER DATE requires a valid date for line: " + (i + 1) + ".");
+                            return false;
+                        }
+                        if (patternSerialNumber.test(stOrderSerialNum) == false) {
+                            alert("Warranty Validation Alert: SERIAL NUMBER requires a valid Serial Number for line: " + (i + 1) + ".");
+                            return false;
+                        }
+                    }
+                    else if(stPreviousSkuId && stConfigSkuId && (stPreviousSkuId != stConfigSkuId)) {
+                        var stPreviousSkuName = objCurrentRec.getSublistText({sublistId: 'item', fieldId: 'item', line: stPreviousSkuLine});
+                        alert("Warranty Validation Alert: You have entered an incorrect warranty for Item: " + stPreviousSkuName + ".");
+                        return false;
+                    }
+                             
+                }
+            }
+        }
+        log.debug('Returning True');
+		return true; //Return true if you want to continue saving the record.
     }
     
     return exports;

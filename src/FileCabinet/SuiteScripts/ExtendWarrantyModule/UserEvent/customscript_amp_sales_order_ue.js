@@ -32,7 +32,7 @@ define([
             const stItemLineCount = objNewRecord.getLineCount({sublistId: 'item'});
             objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: false});
             // Iterate through the lines to check if the inventory item is associated with a 
-            // warranty item sku. If so, flag the order and break
+            // warranty item sku. If so, flag the order for contract creation and break
             log.debug('Item', stItemLineCount);
             for(let i = 0; i < stItemLineCount; i++){
                 log.debug('Item', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));

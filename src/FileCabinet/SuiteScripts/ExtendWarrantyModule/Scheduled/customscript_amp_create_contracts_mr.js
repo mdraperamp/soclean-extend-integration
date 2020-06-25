@@ -16,10 +16,12 @@
  */
 define([
     'N/record',
+    'N/search',
+    'N/format',
     '../Libs/customscript_amp_util',
     '../Libs/customscript_amp_item_api'
 ], 
-(record, util, api) => {
+(record, search, format, util, api) => {
     
     var exports = {};
 
@@ -75,8 +77,9 @@ define([
         var arrSearchResults = util.search('transaction', 'customsearch_amp_extend_ex_serial_line');
         var objResults = {};
         var stSerialNumber = '';
+        var stOrderSku = '';
         var flPurchasePrice = 0;
-        
+
         // Loop through results and build context object containing all the necessary
         // data per line
         for(let i = 0; i < arrSearchResults.length; i++){
@@ -86,15 +89,24 @@ define([
             if(stItemType !== 'NonInvtPart'){
                 stSerialNumber = arrSearchResults[i].getValue({name: 'serialnumbers', join: 'fulfillingTransaction'});
                 flPurchasePrice = arrSearchResults[i].getValue({name: 'amount'});
+                stOrderSku = arrSearchResults[i].getText({name: 'item'});
                 continue;
             }
             // Build context object
             var stOrderId = arrSearchResults[i].id;
             var stLineNumber = arrSearchResults[i].getValue({name: 'linesequencenumber'});
-            var objTranDate = new Date(arrSearchResults[i].getValue({name: 'trandate'}));
-            objTranDate = objTranDate.getTime() / 1000;
+            var objTranDate = arrSearchResults[i].getValue({name: 'trandate'});
 
             const stKey = `${stOrderId}_${stLineNumber}`;
+
+            // If the order is stand alone, the order should have required columns populated
+            // We should assess and convert these values
+            stSerialNumber = stSerialNumber ? stSerialNumber : arrSearchResults[i].getValue({name: 'custcol_amp_ext_serial_number'});
+            stOrderSku = stOrderSku ? stOrderSku : arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_sku'});
+            flPurchasePrice = flPurchasePrice ? flPurchasePrice : getSkuCost(stOrderSku);
+            var objOrigOrderDate = arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_order_date'});
+            objTranDate = objOrigOrderDate ? objOrigOrderDate : objTranDate;
+
             
             objResults[stKey] = {};
             objResults[stKey].id = stOrderId;
@@ -105,7 +117,7 @@ define([
             objResults[stKey].order_number = arrSearchResults[i].getValue({name: 'tranid'});
             objResults[stKey].serial_number = stSerialNumber;
             objResults[stKey].extend_plan_id = arrSearchResults[i].getValue({name: 'custitem_amp_ext_plan_id', join: 'item'});
-            objResults[stKey].extend_sku = arrSearchResults[i].getText({name: 'custitem_amp_ext_inv_sku', join: 'item'});
+            objResults[stKey].extend_sku = stOrderSku 
             objResults[stKey].line_amount = arrSearchResults[i].getValue({name: 'amount'});
             objResults[stKey].total_amount = arrSearchResults[i].getValue({name: 'total'});
             objResults[stKey].name = arrSearchResults[i].getText({name: 'entity'}).replace(/[0-9]/g, '');
@@ -121,6 +133,12 @@ define([
             objResults[stKey].ship_state = arrSearchResults[i].getValue({name: 'shipstate'});
             objResults[stKey].ship_zip = arrSearchResults[i].getValue({name: 'shipzip'});
             objResults[stKey].ship_country = arrSearchResults[i].getValue({name: 'shipcountry'});
+            
+            // Clear globals for non standalone orders
+            stSerialNumber = '';
+            stOrderSku = '';
+            flPurchasePrice = 0;
+            
         }
         return objResults;
     };
@@ -130,9 +148,10 @@ define([
         return objCurrencyInfo[currency].code;
     };
     const buildExtendJSON = objValues => {
+        const stTranDate = new Date(objValues.tran_date);
         var objJSON = {
             'transactionId': objValues.id,
-            'transactionDate': objValues.tran_date,
+            'transactionDate': stTranDate.getTime() / 1000,
             'transactionTotal': objValues.total_amount.replace('.', ''),
             'currency' : objValues.currency,
             'poNumber': objValues.order_number,
@@ -190,6 +209,23 @@ define([
             fieldId: 'custcol_amp_ext_serial_number',
             value: objValues.serial_number
         });
+        // Write sku from the fufilled inventory item
+        objSalesOrder.setCurrentSublistValue({
+            sublistId: 'item',
+            fieldId: 'custcol_amp_ext_original_sku',
+            value: objValues.extend_sku
+        });
+        // Format the date for netsuite
+        var objFormattedDate = format.format({
+            value: objValues.tran_date,
+            type: format.Type.DATE
+        });
+        // Write date from order
+        objSalesOrder.setCurrentSublistValue({
+            sublistId: 'item',
+            fieldId: 'custcol_amp_ext_original_order_date',
+            value: objFormattedDate
+        });
         objSalesOrder.commitLine({
             sublistId: 'item'
         });
@@ -198,6 +234,22 @@ define([
             value: false
         });
         objSalesOrder.save();
+    };
+    const getSkuCost = (stOrderSku) => {
+        var arrFilters = [];
+        arrFilters.push(search.createFilter({name: 'itemid', operator: 'is', values: [stOrderSku]}));
+
+        var arrColumns = [];
+        arrColumns.push(search.createColumn({name: 'cost'}));
+
+        var arrSearchResults = util.search('item', null, arrFilters, arrColumns);
+
+        var flPurchasePrice = 0.00;
+        if(arrSearchResults.length > 0){
+            flPurchasePrice = arrSearchResults[0].getValue({name: 'cost'});
+        }
+
+        return flPurchasePrice;
     };
     // Return mr functions
     return exports;

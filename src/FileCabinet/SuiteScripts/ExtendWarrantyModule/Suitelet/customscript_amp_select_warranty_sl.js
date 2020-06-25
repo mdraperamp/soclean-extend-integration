@@ -128,7 +128,7 @@ define([
         var arrColumns = [];
         arrColumns.push(search.createColumn({name: 'internalid'}));
         arrColumns.push(search.createColumn({name: 'salesdescription'}));
-        arrColumns.push(search.createColumn({name: 'baseprice'}));
+        arrColumns.push(search.createColumn({name: 'baseprice', sort: search.Sort.ASC}));
         
         var arrPlans = util.search('item', null, arrFilters, arrColumns);
 

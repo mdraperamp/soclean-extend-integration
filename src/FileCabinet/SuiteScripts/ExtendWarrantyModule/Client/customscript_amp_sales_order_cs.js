@@ -85,23 +85,17 @@ function(url, search) {
     }
     function validateWarranty(context){
 
-        var objCurrentRec = context.currentRecord;
-		// var bSkuFound = false;
-        // var stWarrantyQuantity = 0;
-        // var stSkuQuantity = 0;
-        // var stOrderType = 'none';	
+        var objCurrentRec = context.currentRecord;	
 		var patternSalesOrder = /^[S][O][0-9]{1,10}?$/;
 		var patternSerialNumber = /^[S][C][1][2][0][0][0-9]{1,11}?$/;
-		// var patternSku = /^[S][C][0-9]{4,4}?$/;
-	
-        //new code start
-        const stItemLineCount = objCurrentRec.getLineCount({sublistId: 'item'});
+		var patternSku = /^[S][C][0-9]{4,4}?$/;
         var stPreviousSkuQuant = 0;
         var stPreviousSkuId = '';
         var stPreviousSkuLine = 0;
         // Iterate through the lines to check if the inventory item is associated with a 
         // warranty item sku. If so, we need to gather information about the number of items
         // in the list
+        const stItemLineCount = objCurrentRec.getLineCount({sublistId: 'item'});
         for(var i = 0; i < stItemLineCount; i++){
             var stItemId = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'item', line: i});
            
@@ -111,6 +105,16 @@ function(url, search) {
                 columns: ['type', 'custitem_amp_ext_inv_sku', 'custitem_amp_is_warranty']
             });
             log.debug('Item Lookup', arrFieldLookup);
+            
+            var arrLookupIds = arrFieldLookup.custitem_amp_ext_inv_sku;
+            var objConfigSkus = {};
+            if(arrLookupIds.length > 0){
+                for(var j = 0; j < arrLookupIds.length; j++){
+                    objConfigSkus[arrLookupIds[j].value] = arrLookupIds[j].value;
+                }
+            }
+            // log.debug('Obj of config ids', objConfigSkus);
+            
             const stItemType = arrFieldLookup.type[0].value;
             // If the item is inventory, check if it is a warranty item designated as LIVE
             if(stItemType === 'InvtPart'){
@@ -126,7 +130,9 @@ function(url, search) {
             var stConfigSkuId = '';
             if(stItemType === 'NonInvtPart'){
 
-                stConfigSkuId = arrFieldLookup.custitem_amp_ext_inv_sku[0].value;
+                // stConfigSkuId = arrFieldLookup.custitem_amp_ext_inv_sku[0].value;
+                stConfigSkuId = objConfigSkus[stPreviousSkuId];
+                
                 const stContractId = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
                 
                 log.debug('Contract ID', stContractId);
@@ -147,12 +153,14 @@ function(url, search) {
                         const stOrderNumber = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_warranty_order_num', line: i});
                         const stOrderDate = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_original_order_date', line: i});
                         const stOrderSerialNum = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_serial_number', line: i});
+                        const stOrderSKU = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_original_sku', line: i});
+
                         if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i}) > 1){
                             alert("Warranty Validation Alert: You must enter a quantity of 1 for a warranty. You may not purchase multiple warranties on a single line.");
                             return false;
                         }
                         if(patternSalesOrder.test(stOrderNumber) == false) {
-                            alert("Warranty Validation Alert: ORDER NUMBER requires a valid NetSuite Sales Order Number for line: " + (i + 1) + ".");
+                            alert("Warranty Validation Alert: ORIGINAL ORDER NUMBER requires a valid NetSuite Sales Order Number for line: " + (i + 1) + ".");
                             return false;
                         }
                         if(!stOrderDate) {
@@ -160,11 +168,16 @@ function(url, search) {
                             return false;
                         }
                         if (patternSerialNumber.test(stOrderSerialNum) == false) {
-                            alert("Warranty Validation Alert: SERIAL NUMBER requires a valid Serial Number for line: " + (i + 1) + ".");
+                            alert("Warranty Validation Alert: EXTEND SERIAL NUMBER requires a valid Serial Number for line: " + (i + 1) + ".");
+                            return false;
+                        }
+                        if (patternSku.test(stOrderSKU) == false) {
+                            alert("Warranty Validation Alert: ORIGINAL ORDER SKU requires a valid Serial Number for line: " + (i + 1) + ".");
                             return false;
                         }
                     }
                     else if(stPreviousSkuId && stConfigSkuId && (stPreviousSkuId != stConfigSkuId)) {
+                        log.debug('MisMatch', stPreviousSkuId + '; ' + stConfigSkuId);
                         var stPreviousSkuName = objCurrentRec.getSublistText({sublistId: 'item', fieldId: 'item', line: stPreviousSkuLine});
                         alert("Warranty Validation Alert: You have entered an incorrect warranty for Item: " + stPreviousSkuName + ".");
                         return false;

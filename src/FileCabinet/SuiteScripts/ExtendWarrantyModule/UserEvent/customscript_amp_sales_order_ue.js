@@ -23,7 +23,7 @@ define([
         log.debug('Exexction Context', runtime.executionContext);
         
         // Only execute for orders created via userinterface and webservices
-        if(['USERINTERFACE', 'WEB_SERVICES'].indexOf(runtime.executionContext) == -1){
+        if(['USERINTERFACE', 'WEBSERVICES'].indexOf(runtime.executionContext) == -1){
             return;
         }
         const objNewRecord = context.newRecord;
@@ -31,22 +31,31 @@ define([
         try {
             const stItemLineCount = objNewRecord.getLineCount({sublistId: 'item'});
             objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: false});
+
             // Iterate through the lines to check if the inventory item is associated with a 
             // warranty item sku. If so, flag the order for contract creation and break
             log.debug('Item', stItemLineCount);
+
             for(let i = 0; i < stItemLineCount; i++){
+
                 log.debug('Item', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
+                
                 var arrFieldLookup = search.lookupFields({
                     type: 'item',
                     id: objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}),
                     columns: ['type', 'custitem_amp_ext_inv_sku']
                 });
+
                 const stItemType = arrFieldLookup.type[0].value;
+                
                 if(stItemType === 'NonInvtPart'){
-                    const stSkuId = arrFieldLookup.custitem_amp_ext_inv_sku[0].value;
+
+                    const arrSkuIds = arrFieldLookup.custitem_amp_ext_inv_sku;
                     const stContractId = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
+                    
                     log.debug('Contract ID', stContractId);
-                    if(util.isNotEmpty(stSkuId) && !stContractId){   
+                    
+                    if(arrSkuIds.length > 1 && !stContractId){   
                         objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
                         break;
                     }

@@ -143,8 +143,15 @@ function(url, search) {
                     if(stPreviousSkuId == stConfigSkuId){
                         log.debug('NOT A STAND ALONE ORDER');
                         // Order is not stand alone or contains associated SKU items. The warranty is covering the previous SKU
+                        log.debug('Warranty Line Quant', objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i}));
+                        // Check previous sku
                         if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: stPreviousSkuLine}) > 1){
                             alert("Warranty Validation Alert: You must enter a quantity of 1 for items covered by warranty. Please ensure only 1 Warranty is being sold per SKU.");
+                            return false;
+                        }
+                        // Check warranty item
+                        if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i}) > 1){
+                            alert("Warranty Validation Alert: You must enter a quantity of 1 for a warranty. You may not purchase multiple warranties on a single line.");
                             return false;
                         }
                         stPreviousSkuId = '';
@@ -157,7 +164,9 @@ function(url, search) {
                         const stOrderDate = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_original_order_date', line: i});
                         const stOrderSerialNum = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_serial_number', line: i});
                         const stOrderSKU = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_original_sku', line: i});
-
+                        
+                        log.debug('Warranty Line Quant', objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i}));
+                        
                         if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: i}) > 1){
                             alert("Warranty Validation Alert: You must enter a quantity of 1 for a warranty. You may not purchase multiple warranties on a single line.");
                             return false;

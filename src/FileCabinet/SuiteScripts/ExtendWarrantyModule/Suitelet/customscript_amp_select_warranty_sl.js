@@ -55,24 +55,20 @@ define([
                 break;
             }
         }
-        log.debug('item id ', stItemId);
-        if(stItemId){
-            // Prepare window.opener html to post values back to the line
-            var html = '<html>';
-            html += ' <body>';
-            html += ' <script language="JavaScript">';
-            html += ' if(window.opener) {';
-            html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${stItemId}, true, true);`;
-            html += ' };';
-            html += ' window.close();';
-            html += ' </script>';
-            html += ' </body>';
-            html += '</html>';
-            // Write repsponse
-            context.response.write(html);
-        } else {
-            alert('You must select a warranty before submitting the form.');
-        }
+        
+        // Prepare window.opener html to post values back to the line
+        var html = '<html>';
+        html += ' <body>';
+        html += ' <script language="JavaScript">';
+        html += ' if(window.opener) {';
+        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${stItemId}, true, true);`;
+        html += ' };';
+        html += ' window.close();';
+        html += ' </script>';
+        html += ' </body>';
+        html += '</html>';
+        // Write repsponse
+        context.response.write(html);
     }
     handleError = context => {
 

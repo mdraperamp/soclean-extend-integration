@@ -113,11 +113,11 @@ function(url, search) {
                     objConfigSkus[arrLookupIds[j].value] = arrLookupIds[j].value;
                 }
             }
-            // log.debug('Obj of config ids', objConfigSkus);
+            log.debug('Obj of config ids', objConfigSkus);
             
             const stItemType = arrFieldLookup.type[0].value;
             // If the item is inventory, check if it is a warranty item designated as LIVE
-            if(stItemType === 'InvtPart'){
+            if(stItemType !== 'NonInvtPart'){
                 const bIsWarranty = arrFieldLookup.custitem_amp_is_warranty;
                 if(bIsWarranty){
                     // Item is live, get values for warranty compares downstream
@@ -131,15 +131,17 @@ function(url, search) {
             if(stItemType === 'NonInvtPart'){
 
                 // stConfigSkuId = arrFieldLookup.custitem_amp_ext_inv_sku[0].value;
-                stConfigSkuId = objConfigSkus[stPreviousSkuId];
+                // stConfigSkuId = objConfigSkus[stPreviousSkuId];
                 
                 const stContractId = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
                 
-                log.debug('Contract ID', stContractId);
                 // If a contract ID already exits (it shouldnt) skip this logic
-                if(stConfigSkuId && !stContractId){
+                if(arrLookupIds.length > 1 && !stContractId){
+
+                    stConfigSkuId = objConfigSkus[stPreviousSkuId];
 
                     if(stPreviousSkuId == stConfigSkuId){
+                        log.debug('NOT A STAND ALONE ORDER');
                         // Order is not stand alone or contains associated SKU items. The warranty is covering the previous SKU
                         if(objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'quantity', line: stPreviousSkuLine}) > 1){
                             alert("Warranty Validation Alert: You must enter a quantity of 1 for items covered by warranty. Please ensure only 1 Warranty is being sold per SKU.");
@@ -147,7 +149,8 @@ function(url, search) {
                         }
                         stPreviousSkuId = '';
 
-                    } else if(!stPreviousSkuId && stConfigSkuId){
+                    } else if(!stPreviousSkuId){
+                        log.debug('STAND ALONE ORDER');
                         // Order is a stand alone order. No SKUS are associated with the warranty
                         // Validate necessary fields are populated for the original order
                         const stOrderNumber = objCurrentRec.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_warranty_order_num', line: i});
@@ -171,7 +174,7 @@ function(url, search) {
                             alert("Warranty Validation Alert: EXTEND SERIAL NUMBER requires a valid Serial Number for line: " + (i + 1) + ".");
                             return false;
                         }
-                        if (patternSku.test(stOrderSKU) == false) {
+                        if (!stOrderSKU) {
                             alert("Warranty Validation Alert: ORIGINAL ORDER SKU requires a valid Serial Number for line: " + (i + 1) + ".");
                             return false;
                         }

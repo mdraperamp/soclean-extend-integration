@@ -55,19 +55,24 @@ define([
                 break;
             }
         }
-        // Prepare window.opener html to post values back to the line
-        var html = '<html>';
-        html += ' <body>';
-        html += ' <script language="JavaScript">';
-        html += ' if(window.opener) {';
-        html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${stItemId}, true, true);`;
-        html += ' };';
-        html += ' window.close();';
-        html += ' </script>';
-        html += ' </body>';
-        html += '</html>';
-        // Write repsponse
-        context.response.write(html);
+        log.debug('item id ', stItemId);
+        if(stItemId){
+            // Prepare window.opener html to post values back to the line
+            var html = '<html>';
+            html += ' <body>';
+            html += ' <script language="JavaScript">';
+            html += ' if(window.opener) {';
+            html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${stItemId}, true, true);`;
+            html += ' };';
+            html += ' window.close();';
+            html += ' </script>';
+            html += ' </body>';
+            html += '</html>';
+            // Write repsponse
+            context.response.write(html);
+        } else {
+            alert('You must select a warranty before submitting the form.');
+        }
     }
     handleError = context => {
 
@@ -119,6 +124,11 @@ define([
             label: 'Price'
         });
         // Add Submit Button
+        objForm.addButton({
+            id: 'custpage_cancel',
+            label: 'Cancel',
+            functionName: 'handleClose()'
+        });
         objForm.addSubmitButton('Submit');
 
         // Search for warranty items for the give inventory item

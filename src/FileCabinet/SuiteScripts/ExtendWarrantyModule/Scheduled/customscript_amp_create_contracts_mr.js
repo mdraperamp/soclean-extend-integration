@@ -24,14 +24,23 @@ define([
 (record, search, format, util, api) => {
     
     var exports = {};
-
     // Get input data and build reduce object
     exports.getInputData = context => {
         try {
-            
-            var objSalesOrders = getSalesOrderDetails();
-            log.debug('GET INPUT DATA: Orders', objSalesOrders);
-            return objSalesOrders;
+            // Fetch all elible sales orders
+            var arrElibgibleOrders = getElibleOrders();
+            var objSalesOrderDetails = {};
+            // Loop through result and build Sales Order Detail Object
+            if(arrElibgibleOrders.length > 0){
+                for(let i = 0; i < arrElibgibleOrders.length; i++){
+                    var stOrderId = arrElibgibleOrders[i].id;
+                    // Build detail object
+                    getSalesOrderDetails(stOrderId, objSalesOrderDetails);
+                }
+            }
+            log.debug('GET INPUT DATA: Orders', objSalesOrderDetails);
+
+            return objSalesOrderDetails;
 
         } catch(e){
 
@@ -40,7 +49,10 @@ define([
     };
     exports.map = context => {
         try {
+            log.debug('MAP: Context', context);
+            // Suitescript 2.1 requires MAP *Possible bug*
             context.write(context.key, JSON.parse(context.value));
+
         } catch(e) {
             log.debug('ERROR in MAP stage', e);
         }
@@ -48,8 +60,11 @@ define([
     // Iterate through context and create Extend warranty
     exports.reduce = context => {
         try {
+            // Parse values
             const objValues = JSON.parse(context.values[0]);
             const stOrderId = objValues.id;
+
+            // Build the Extend JSON from the details object
             const objExtendJSON = buildExtendJSON(objValues);
             log.debug('REDUCE: JSON Request Payload for ' + stOrderId, JSON.stringify(objExtendJSON));
             
@@ -62,6 +77,7 @@ define([
             if(objResponse.id){
                 const stContractId = objResponse.id;
                 updateSalesOrder(stOrderId, objValues, stContractId);
+                log.debug('REDUCE: Sales Order Update SUCCESS: ', stOrderId);
             }
 
         } catch(e){
@@ -69,13 +85,24 @@ define([
         }
     };
     exports.summarize = summary => {
-
+        // No Summary Requirements at the time of build
     };
     // Get all sales orders that are in need of Extend contract
-    const getSalesOrderDetails = () => {
+    const getElibleOrders = () => {
+        // Custom Search EXTEND: Eligible Sales Orders for Contract Creation MR
+        var arrSearchResults = util.search('transaction', 'customsearch_amp_ext_eligible_orders');
 
-        var arrSearchResults = util.search('transaction', 'customsearch_amp_extend_ex_serial_line');
-        var objResults = {};
+        return arrSearchResults;
+    };
+    const getSalesOrderDetails = (stOrderId, objResults) => {
+        
+        var arrFilters = [];
+        arrFilters.push(search.createFilter({name: 'internalid', operator: 'is', values: [stOrderId]}));
+
+        // Custom Search AMP EXTEND: Eligible Sales Order Details for Contract Creation MR 
+        var arrSearchResults = util.search('transaction', 'customsearch_amp_extend_ex_serial_line', arrFilters);
+        log.debug('Array of Results', arrSearchResults);
+
         var stSerialNumber = '';
         var stOrderSku = '';
         var flPurchasePrice = 0;
@@ -87,14 +114,17 @@ define([
             var stItemType = arrSearchResults[i].getValue({name: 'type', join: 'item'});
             // Get the purchase price and serial number for the inventory item
             if(stItemType !== 'NonInvtPart'){
-                stSerialNumber = arrSearchResults[i].getValue({name: 'serialnumbers', join: 'fulfillingTransaction'});
-                flPurchasePrice = arrSearchResults[i].getValue({name: 'amount'});
-                stOrderSku = arrSearchResults[i].getText({name: 'item'});
+                var bIsWarranty = arrSearchResults[i].getValue({name: 'custitem_amp_is_warranty', join: 'item'});
+                if(bIsWarranty){
+                    stSerialNumber = arrSearchResults[i].getValue({name: 'serialnumbers', join: 'fulfillingTransaction'});
+                    flPurchasePrice = arrSearchResults[i].getValue({name: 'amount'});
+                    stOrderSku = arrSearchResults[i].getText({name: 'item'});
+                }
                 continue;
             }
             // Build context object
             var stOrderId = arrSearchResults[i].id;
-            var stLineNumber = arrSearchResults[i].getValue({name: 'linesequencenumber'});
+            var stLineNumber = i;
             var objTranDate = arrSearchResults[i].getValue({name: 'trandate'});
 
             const stKey = `${stOrderId}_${stLineNumber}`;
@@ -104,10 +134,12 @@ define([
             stSerialNumber = stSerialNumber ? stSerialNumber : arrSearchResults[i].getValue({name: 'custcol_amp_ext_serial_number'});
             stOrderSku = stOrderSku ? stOrderSku : arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_sku'});
             flPurchasePrice = flPurchasePrice ? flPurchasePrice : getSkuCost(stOrderSku);
+            var stOgOrderNumber = arrSearchResults[i].getValue({name: 'custcol_amp_ext_warranty_order_num'});
+            var stOrderNumber = stOgOrderNumber ? stOgOrderNumber : arrSearchResults[i].getValue({name: 'tranid'});
             var objOrigOrderDate = arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_order_date'});
             objTranDate = objOrigOrderDate ? objOrigOrderDate : objTranDate;
 
-            
+            // Build details object using the orderId _ linenum as the key
             objResults[stKey] = {};
             objResults[stKey].id = stOrderId;
             objResults[stKey].line = stLineNumber;
@@ -115,6 +147,7 @@ define([
             objResults[stKey].purchase_price = flPurchasePrice;
             objResults[stKey].currency = getCurrencyCode(arrSearchResults[i].getValue({name: 'currency'}));
             objResults[stKey].order_number = arrSearchResults[i].getValue({name: 'tranid'});
+            objResults[stKey].og_order_number = stOrderNumber;
             objResults[stKey].serial_number = stSerialNumber;
             objResults[stKey].extend_plan_id = arrSearchResults[i].getValue({name: 'custitem_amp_ext_plan_id', join: 'item'});
             objResults[stKey].extend_sku = stOrderSku 
@@ -140,14 +173,15 @@ define([
             flPurchasePrice = 0;
             
         }
-        return objResults;
     };
     // Get and return currency code
     const getCurrencyCode = currency => {
         var objCurrencyInfo = util.getCurrencyInfo();
         return objCurrencyInfo[currency].code;
     };
+    // Build the Extend API JSON for contract creation
     const buildExtendJSON = objValues => {
+        // Date is a string and we need to format for extend
         const stTranDate = new Date(objValues.tran_date);
         var objJSON = {
             'transactionId': objValues.id,
@@ -186,67 +220,94 @@ define([
         };
         return objJSON;
     };
+    // Update the warranty line with the appropriate required values for reporting
     const updateSalesOrder = (stOrderId, objValues, stContractId) => {
-        var objSalesOrder = record.load({
-            type: 'salesorder',
-            id: stOrderId,
-            isDynamic: true
-        });
-        log.debug('Line Number', objValues.line);
-        objSalesOrder.selectLine({
-            sublistId: 'item',
-            line: objValues.line - 1
-        });
-        // Write contract id from response
-        objSalesOrder.setCurrentSublistValue({
-            sublistId: 'item',
-            fieldId: 'custcol_amp_ext_contract_id',
-            value: stContractId
-        });
-        // Write serial number from the fufilled inventory item
-        objSalesOrder.setCurrentSublistValue({
-            sublistId: 'item',
-            fieldId: 'custcol_amp_ext_serial_number',
-            value: objValues.serial_number
-        });
-        // Write sku from the fufilled inventory item
-        objSalesOrder.setCurrentSublistValue({
-            sublistId: 'item',
-            fieldId: 'custcol_amp_ext_original_sku',
-            value: objValues.extend_sku
-        });
-        // Format the date for netsuite
-        var objFormattedDate = format.format({
-            value: objValues.tran_date,
-            type: format.Type.DATE
-        });
-        // Write date from order
-        objSalesOrder.setCurrentSublistValue({
-            sublistId: 'item',
-            fieldId: 'custcol_amp_ext_original_order_date',
-            value: objFormattedDate
-        });
-        objSalesOrder.commitLine({
-            sublistId: 'item'
-        });
-        objSalesOrder.setValue({
-            fieldId: 'custbody_amp_ext_to_be_processed',
-            value: false
-        });
-        objSalesOrder.save();
+        try {
+            var objSalesOrder = record.load({
+                type: 'salesorder',
+                id: stOrderId,
+                isDynamic: true
+            });
+            log.debug('Line Number', objValues.line);
+            objSalesOrder.selectLine({
+                sublistId: 'item',
+                line: objValues.line
+            });
+            // Write order id from response
+            objSalesOrder.setCurrentSublistValue({
+                sublistId: 'item',
+                fieldId: 'custcol_amp_ext_warranty_order_num',
+                value: objValues.og_order_number
+            });
+            // Write contract id from response
+            objSalesOrder.setCurrentSublistValue({
+                sublistId: 'item',
+                fieldId: 'custcol_amp_ext_contract_id',
+                value: stContractId
+            });
+            // Write serial number from the fufilled inventory item
+            objSalesOrder.setCurrentSublistValue({
+                sublistId: 'item',
+                fieldId: 'custcol_amp_ext_serial_number',
+                value: objValues.serial_number
+            });
+            // Write sku from the fufilled inventory item
+            objSalesOrder.setCurrentSublistValue({
+                sublistId: 'item',
+                fieldId: 'custcol_amp_ext_original_sku',
+                value: objValues.extend_sku
+            });
+            // Format the date for netsuite
+            var objFormattedDate = format.parse({
+                value: objValues.tran_date,
+                type: format.Type.DATE
+            });
+            // Write date from order
+            objSalesOrder.setCurrentSublistValue({
+                sublistId: 'item',
+                fieldId: 'custcol_amp_ext_original_order_date',
+                value: objFormattedDate
+            });
+            // Commit the selected sublist line
+            objSalesOrder.commitLine({
+                sublistId: 'item'
+            });
+            // Unflag the order to remove it from the contract creation queue
+            objSalesOrder.setValue({
+                fieldId: 'custbody_amp_ext_to_be_processed',
+                value: false
+            });
+            // Save Order
+            objSalesOrder.save();
+
+        } catch(e){
+            log.debug('REDUCE: Error Saving Order', e);
+            log.debug('REDUCE: Error saving Sales Order Id ' + stOrderId, 'Extend Contract Id: ' + stContractId);
+            // If by chance the sales order is not updated, flag the order to remove it from the queue
+            // and avoid duplicate Extend contracts
+            record.submitFields({
+                type: 'salesorder',
+                id: stOrderId,
+                values: {
+                    'custbody_amp_ext_to_be_processed' : false
+                }
+            });
+        }
     };
+    // Get the cost of the SKU via search as the SKU is a string ID
     const getSkuCost = (stOrderSku) => {
+        log.debug('Sku Id', stOrderSku);
         var arrFilters = [];
         arrFilters.push(search.createFilter({name: 'itemid', operator: 'is', values: [stOrderSku]}));
 
         var arrColumns = [];
-        arrColumns.push(search.createColumn({name: 'cost'}));
+        arrColumns.push(search.createColumn({name: 'baseprice'}));
 
         var arrSearchResults = util.search('item', null, arrFilters, arrColumns);
-
+        log.debug('Sku Results', arrSearchResults);
         var flPurchasePrice = 0.00;
         if(arrSearchResults.length > 0){
-            flPurchasePrice = arrSearchResults[0].getValue({name: 'cost'});
+            flPurchasePrice = arrSearchResults[0].getValue({name: 'baseprice'});
         }
 
         return flPurchasePrice;

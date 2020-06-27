@@ -35,7 +35,6 @@ define([
 
             // Iterate through the lines to check if the inventory item is associated with a 
             // warranty item sku. If so, flag the order for contract creation and break
-
             for(let i = 0; i < stItemLineCount; i++){
 
                 
@@ -46,7 +45,7 @@ define([
                 });
 
                 const stItemType = arrFieldLookup.type[0].value;
-
+                log.debug('BEFORESUBMIT: Item Type', stItemType);
                 if(stItemType === 'NonInvtPart'){
 
                     const arrSkuIds = arrFieldLookup.custitem_amp_ext_inv_sku;
@@ -55,43 +54,134 @@ define([
                     if(arrSkuIds.length > 1 && !stContractId){   
                         log.debug('BEFORESUBMIT: Is a Warranty Order', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
                         objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
+                        
+                        if(i == 0 && stItemLineCount > 1){
+                            //This is a kit
+                            log.debug('BEFORESUBMIT: Is a Kit Order');
+                            objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: true});
+                        }
                         break;
                     }
                 }
-                // if(stItemType === 'Kit' && objNewRecord.getValue({fieldId: 'custbody_amp_ext_to_be_processed'})){
-                //     log.debug('BEFORESUBMIT: Is a Kit Order', objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: true}));
-
-                // }
             }
         } catch(e) {
             log.debug('BEFORESUBMIT: Error Setting Extend Field for Job', JSON.stringify(e.message));
         }
     };
     exports.afterSubmit = context => {
+        
         log.debug('AFTERSUBMIT: Execution Context', runtime.executionContext);
         
         // Only execute for orders created via webservices. These validations will be
         // prohibited via the user interface
-        if([/*'USERINTERFACE',*/ 'WEBSERVICES'].indexOf(runtime.executionContext) == -1){
+        if(['USERINTERFACE', 'WEBSERVICES'].indexOf(runtime.executionContext) == -1){
             return;
         }
+        const objNewRecord = context.newRecord;
+        
+        // Check if the order was flagged as a warranty order beforeSubmit
+        const bIsWarrantyOrder = objNewRecord.getValue({fieldId: 'custbody_amp_ext_to_be_processed'});
+        
+        // If this is not a warranty order, skip the line parsing logic
+        log.debug('AFTERSUBMIT: Is a warranty Order? ', bIsWarrantyOrder);
+        
+        if(!bIsWarrantyOrder || bIsWarrantyOrder === 'F'){
+            return;
+        }
+        // If this is a kit order we need to parse out warranty properly
+        const bIsKitOrder = objNewRecord.getValue({fieldId: 'custbody_amp_ext_kit_order'});
+        if(bIsKitOrder){
+            handleKitWithWarranty(objNewRecord);
+        }
+        // Line parsing is not needed in UI as validation logic is done on the client side
+        // if(runtime.executionContext === 'WEBSERVICES'){
+            parseWarrantyLines(objNewRecord);
+        // }
+  
+    };
+    const handleKitWithWarranty = objNewRecord => {
+        log.debug('AFTERSUBMIT: Parsing Kit');
 
         try {
-            const objNewRecord = context.newRecord;
-            // Check if the order was flagged as a warranty order beforeSubmit
-            const bIsWarrantyOrder = objNewRecord.getValue({fieldId: 'custbody_amp_ext_to_be_processed'});
-            
-            // If this is not a warranty order, skip the line parsing logic
-            log.debug('AFTERSUBMIT: Is a warranty Order? ', bIsWarrantyOrder);
-            
-            if(!bIsWarrantyOrder || bIsWarrantyOrder === 'F'){
-                return;
-            }
-            // If this is a kit order we need to parse out warranty properly
-            // if(bIsKitOrder){
+            // Load record and get values
+            var objSalesOrder = record.load({
+                type: objNewRecord.type,
+                id: objNewRecord.id
+            });
+            var stLineCount = objSalesOrder.getLineCount({sublistId: 'item'});
+            var stWarrantyId = '';
 
-            // }
-            
+            for(let i = 0; i < stLineCount; i++){
+                // Get the item id
+                var stItemId = objSalesOrder.getSublistValue({
+                    sublistId: 'item',
+                    fieldId: 'item',
+                    line: i
+                });
+                // Look up if the item is configured to be offered 
+                var arrFieldLookup = search.lookupFields({
+                    type: 'item',
+                    id: stItemId,
+                    columns: ['custitem_amp_ext_inv_sku']
+                });
+                // Configured LIVE skus assigned to the warranty
+                var arrLookupIds = arrFieldLookup.custitem_amp_ext_inv_sku;
+                if(arrLookupIds.length > 0){
+                    // Remove Line
+                    objSalesOrder.removeLine({
+                        sublistId: 'item',
+                        line: i,
+                        ignoreRecalc: true
+                    });
+                    stWarrantyId = stItemId;
+                    break;
+                }
+            }
+            var bSalesOrderSave = false;
+            for(let i = 0; i < stLineCount; i++){
+                // Get the item id
+                var stItemId = objSalesOrder.getSublistValue({
+                    sublistId: 'item',
+                    fieldId: 'item',
+                    line: i
+                });
+                // Look up if the item is configured to be offered 
+                var arrFieldLookup = search.lookupFields({
+                    type: 'item',
+                    id: stItemId,
+                    columns: ['custitem_amp_is_warranty']
+                });
+                // Configured LIVE skus assigned to the warranty
+                const bIsWarranty = arrFieldLookup.custitem_amp_is_warranty;
+                if(bIsWarranty){
+                    // Insert Line
+                    objSalesOrder.insertLine({
+                        sublistId: 'item',
+                        line: i + 1
+                    });
+                    objSalesOrder.setSublistValue({
+                        sublistId: 'item',
+                        fieldId: 'item',
+                        line: i + 1,
+                        value: stWarrantyId
+                    });
+                    bSalesOrderSave = true;
+                    break;
+                }
+            }
+            // If line insert updates are made to the line, save the sales order
+            if(bSalesOrderSave){
+                log.debug('AFTERSUBMIT: Saving Record');
+                objSalesOrder.save();
+            }
+        } catch(e){
+            log.debug('AFTERSUBMIT: Error creating SO', e);
+        }
+    };
+    const parseWarrantyLines = objNewRecord => {
+        log.debug('AFTERSUBMIT: Parsing Lines');
+
+        try{
             // Load record and get values
             var objSalesOrder = record.load({
                 type: objNewRecord.type,
@@ -124,7 +214,7 @@ define([
                     columns: ['custitem_amp_ext_inv_sku', 'custitem_amp_is_warranty', 'type']
                 });
                 const stItemType = arrFieldLookup.type[0].value;
-                log.debug('Item type', stItemType);
+                log.debug('AFTERSUBMIT: Item Type', stItemType);
                 // Configured LIVE skus assigned to the warranty
                 var arrLookupIds = arrFieldLookup.custitem_amp_ext_inv_sku;
                 // Build an object from array for quick reference
@@ -319,7 +409,25 @@ define([
                     stWarrantyCount--;
                 }
                 log.debug('AFTERSUBMIT: Add standalone line for warranty', stWarrantyId);
-            }            
+            }
+            else if(arrSkuLines.length > 0){
+                bSalesOrderSave = true;
+                for(let i = 0; i < stSkuCount; i++){
+                    log.debug('AFTERSUBMIT: Add standalone line for ', stInvItemId);
+                    objSalesOrder.insertLine({
+                        sublistId: 'item',
+                        line: stLineCount
+                    });
+                    objSalesOrder.setSublistValue({
+                        sublistId: 'item',
+                        fieldId: 'item',
+                        line: stLineCount,
+                        value: stInvItemId
+                    });
+                    stSkuCount--;
+                }
+                log.debug('AFTERSUBMIT: Add standalone line for warranty', stWarrantyId);
+            }                 
             // If line insert updates are made to the line, save the sales order
             if(bSalesOrderSave){
                 log.debug('AFTERSUBMIT: Saving Record');

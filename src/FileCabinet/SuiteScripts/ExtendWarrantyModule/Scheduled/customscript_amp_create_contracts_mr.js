@@ -18,10 +18,12 @@ define([
     'N/record',
     'N/search',
     'N/format',
+    'N/runtime',
     '../Libs/customscript_amp_util',
-    '../Libs/customscript_amp_item_api'
+    '../Libs/customscript_amp_item_api',
+    '../Libs/customscript_amp_lib_keys'
 ], 
-(record, search, format, util, api) => {
+(record, search, format, runtime, util, api, config) => {
     
     var exports = {};
     // Get input data and build reduce object
@@ -126,6 +128,13 @@ define([
             var stOrderId = arrSearchResults[i].id;
             var stLineNumber = i;
             var objTranDate = arrSearchResults[i].getValue({name: 'trandate'});
+            var stEmail = '';
+            // If in sandbox, set the email to an internal email
+            if(runtime.envType === 'SANDBOX'){
+                stEmail = config.email;
+            } else if(runtime.envType === 'PRODUCTION'){
+                stEmail = arrSearchResults[i].getValue({name: 'email'});
+            }
 
             const stKey = `${stOrderId}_${stLineNumber}`;
 
@@ -135,7 +144,7 @@ define([
             stOrderSku = stOrderSku ? stOrderSku : arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_sku'});
             flPurchasePrice = flPurchasePrice ? flPurchasePrice : getSkuCost(stOrderSku);
             var stOgOrderNumber = arrSearchResults[i].getValue({name: 'custcol_amp_ext_warranty_order_num'});
-            var stOrderNumber = stOgOrderNumber ? stOgOrderNumber : arrSearchResults[i].getValue({name: 'tranid'});
+            // var stOrderNumber = stOgOrderNumber ? stOgOrderNumber : arrSearchResults[i].getValue({name: 'tranid'});
             var objOrigOrderDate = arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_order_date'});
             objTranDate = objOrigOrderDate ? objOrigOrderDate : objTranDate;
 
@@ -147,14 +156,14 @@ define([
             objResults[stKey].purchase_price = flPurchasePrice;
             objResults[stKey].currency = getCurrencyCode(arrSearchResults[i].getValue({name: 'currency'}));
             objResults[stKey].order_number = arrSearchResults[i].getValue({name: 'tranid'});
-            objResults[stKey].og_order_number = stOrderNumber;
+            objResults[stKey].og_order_number = stOgOrderNumber;
             objResults[stKey].serial_number = stSerialNumber;
             objResults[stKey].extend_plan_id = arrSearchResults[i].getValue({name: 'custitem_amp_ext_plan_id', join: 'item'});
             objResults[stKey].extend_sku = stOrderSku 
             objResults[stKey].line_amount = arrSearchResults[i].getValue({name: 'amount'});
             objResults[stKey].total_amount = arrSearchResults[i].getValue({name: 'total'});
             objResults[stKey].name = arrSearchResults[i].getText({name: 'entity'}).replace(/[0-9]/g, '');
-            objResults[stKey].email = arrSearchResults[i].getValue({name: 'email'});
+            objResults[stKey].email = stEmail;
             objResults[stKey].bill_phone = arrSearchResults[i].getValue({name: 'billphone'});
             objResults[stKey].bill_address = arrSearchResults[i].getValue({name: 'billaddress1'});
             objResults[stKey].bill_city = arrSearchResults[i].getValue({name: 'billcity'});

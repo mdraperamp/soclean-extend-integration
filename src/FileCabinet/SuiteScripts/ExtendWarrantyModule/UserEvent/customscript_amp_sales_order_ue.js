@@ -32,6 +32,8 @@ define([
         try {
             const stItemLineCount = objNewRecord.getLineCount({sublistId: 'item'});
             objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: false});
+            objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: false});
+
 
             // Iterate through the lines to check if the inventory item is associated with a 
             // warranty item sku. If so, flag the order for contract creation and break
@@ -43,24 +45,25 @@ define([
                     id: objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}),
                     columns: ['type', 'custitem_amp_ext_inv_sku']
                 });
+                if(arrFieldLookup.type.length > 0){
+                    const stItemType = arrFieldLookup.type[0].value;
+                    log.debug('BEFORESUBMIT: Item Type', stItemType);
+                    if(stItemType === 'NonInvtPart'){
 
-                const stItemType = arrFieldLookup.type[0].value;
-                log.debug('BEFORESUBMIT: Item Type', stItemType);
-                if(stItemType === 'NonInvtPart'){
-
-                    const arrSkuIds = arrFieldLookup.custitem_amp_ext_inv_sku;
-                    const stContractId = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
-                                        
-                    if(arrSkuIds.length > 1 && !stContractId){   
-                        log.debug('BEFORESUBMIT: Is a Warranty Order', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
-                        objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
-                        
-                        if(i == 0 && stItemLineCount > 1){
-                            //This is a kit
-                            log.debug('BEFORESUBMIT: Is a Kit Order');
-                            objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: true});
+                        const arrSkuIds = arrFieldLookup.custitem_amp_ext_inv_sku;
+                        const stContractId = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
+                                            
+                        if(arrSkuIds.length > 1 && !stContractId){   
+                            log.debug('BEFORESUBMIT: Is a Warranty Order', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
+                            objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
+                            
+                            if(i == 0 && stItemLineCount > 1){
+                                //This is a kit
+                                log.debug('BEFORESUBMIT: Is a Kit Order');
+                                objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: true});
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
             }
@@ -90,6 +93,8 @@ define([
         }
         // If this is a kit order we need to parse out warranty properly
         const bIsKitOrder = objNewRecord.getValue({fieldId: 'custbody_amp_ext_kit_order'});
+        log.debug('AFTERSUBMIT: Is a kit Order? ', bIsKitOrder);
+
         if(bIsKitOrder){
             handleKitWithWarranty(objNewRecord);
         }
@@ -103,6 +108,7 @@ define([
         log.debug('AFTERSUBMIT: Parsing Kit');
 
         try {
+            
             // Load record and get values
             var objSalesOrder = record.load({
                 type: objNewRecord.type,
@@ -145,6 +151,10 @@ define([
                     fieldId: 'item',
                     line: i
                 });
+                if(!stItemId){
+                    log.debug('AFTERSUBMIT: Falsely Flagged as Kit. Line has been removed ', 'RETURN');
+                    return;
+                }
                 // Look up if the item is configured to be offered 
                 var arrFieldLookup = search.lookupFields({
                     type: 'item',

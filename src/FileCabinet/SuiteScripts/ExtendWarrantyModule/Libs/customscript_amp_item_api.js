@@ -129,6 +129,7 @@ define([
      */
     exports.createWarrantyContract = (objContractDetails) => {
         try {
+
             const response = https.post({
                 url: `${config.domain}/stores/${config.storeId}/contracts`,
                 headers: {

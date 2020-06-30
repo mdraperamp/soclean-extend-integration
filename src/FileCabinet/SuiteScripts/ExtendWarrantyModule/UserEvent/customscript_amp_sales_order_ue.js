@@ -32,7 +32,7 @@ define([
         try {
             const stItemLineCount = objNewRecord.getLineCount({sublistId: 'item'});
             objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: false});
-            objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: false});
+            // objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: false});
 
 
             // Iterate through the lines to check if the inventory item is associated with a 
@@ -57,11 +57,12 @@ define([
                             log.debug('BEFORESUBMIT: Is a Warranty Order', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
                             objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
                             
-                            if(i == 0 && stItemLineCount > 1){
-                                //This is a kit
-                                log.debug('BEFORESUBMIT: Is a Kit Order');
-                                objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: true});
-                            }
+                            // var stOgOrder = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_warranty_order_num', line: i});
+                            // if(i == 0 && stItemLineCount > 1 && !stOgOrder){
+                            //     //This is a kit
+                            //     log.debug('BEFORESUBMIT: Potentially a Kit Order with Warranty. Flag as Kit Order.');
+                            //     objNewRecord.setValue({fieldId: 'custbody_amp_ext_kit_order', value: true});
+                            // }
                             break;
                         }
                     }
@@ -99,9 +100,9 @@ define([
             handleKitWithWarranty(objNewRecord);
         }
         // Line parsing is not needed in UI as validation logic is done on the client side
-        // if(runtime.executionContext === 'WEBSERVICES'){
+        if(runtime.executionContext === 'WEBSERVICES'){
             parseWarrantyLines(objNewRecord);
-        // }
+        }
   
     };
     const handleKitWithWarranty = objNewRecord => {
@@ -115,13 +116,20 @@ define([
                 id: objNewRecord.id
             });
             var stLineCount = objSalesOrder.getLineCount({sublistId: 'item'});
+            var arrWarranties = [];
             var stWarrantyId = '';
+            var stWarrantyQuant = 0;
 
             for(let i = 0; i < stLineCount; i++){
                 // Get the item id
                 var stItemId = objSalesOrder.getSublistValue({
                     sublistId: 'item',
                     fieldId: 'item',
+                    line: i
+                });
+                var stCurrWarrantyQuant = objSalesOrder.getSublistValue({
+                    sublistId: 'item',
+                    fieldId: 'quantity',
                     line: i
                 });
                 // Look up if the item is configured to be offered 
@@ -133,17 +141,27 @@ define([
                 // Configured LIVE skus assigned to the warranty
                 var arrLookupIds = arrFieldLookup.custitem_amp_ext_inv_sku;
                 if(arrLookupIds.length > 0){
-                    // Remove Line
-                    objSalesOrder.removeLine({
-                        sublistId: 'item',
-                        line: i,
-                        ignoreRecalc: true
-                    });
-                    stWarrantyId = stItemId;
-                    break;
+                    var objWarrantyLine = {
+                        warranty_line : i,
+                        warranty_id : stItemId,
+                        warranty_quant : stCurrWarrantyQuant
+                    };
+                    arrWarranties.push(objWarrantyLine);
                 }
             }
+            // Remove the lines
+            for(let i = 0; i < arrWarranties.length; i++){
+                var stLine = i == 0 ? arrWarranties[i].warranty_line : arrWarranties[i].warranty_line - 1; 
+                objSalesOrder.removeLine({
+                    sublistId: 'item',
+                    line: stLine,
+                    ignoreRecalc: true
+                });
+            }
+
             var bSalesOrderSave = false;
+            log.debug('AFTERSUBMIT: Array of Warranties on the Kit Order', JSON.stringify(arrWarranties));
+            // Add new lines
             for(let i = 0; i < stLineCount; i++){
                 // Get the item id
                 var stItemId = objSalesOrder.getSublistValue({
@@ -152,7 +170,7 @@ define([
                     line: i
                 });
                 if(!stItemId){
-                    log.debug('AFTERSUBMIT: Falsely Flagged as Kit. Line has been removed ', 'RETURN');
+                    log.debug('AFTERSUBMIT: Falsely Flagged as Kit...', 'RETURN');
                     return;
                 }
                 // Look up if the item is configured to be offered 
@@ -163,20 +181,29 @@ define([
                 });
                 // Configured LIVE skus assigned to the warranty
                 const bIsWarranty = arrFieldLookup.custitem_amp_is_warranty;
-                if(bIsWarranty){
+                if(bIsWarranty && arrWarranties.length > 0){
                     // Insert Line
                     objSalesOrder.insertLine({
                         sublistId: 'item',
                         line: i + 1
                     });
+                    // Set Item to Warranty Item
                     objSalesOrder.setSublistValue({
                         sublistId: 'item',
                         fieldId: 'item',
                         line: i + 1,
-                        value: stWarrantyId
+                        value: arrWarranties[0].warranty_id
                     });
+                    // Set Quant from Warranty Item
+                    objSalesOrder.setSublistValue({
+                        sublistId: 'item',
+                        fieldId: 'quantity',
+                        line: i + 1,
+                        value: arrWarranties[0].warranty_quant
+                    });
+                    arrWarranties.splice(0, 1);
                     bSalesOrderSave = true;
-                    break;
+                    // break;
                 }
             }
             // If line insert updates are made to the line, save the sales order
@@ -189,7 +216,7 @@ define([
         }
     };
     const parseWarrantyLines = objNewRecord => {
-        log.debug('AFTERSUBMIT: Parsing Lines');
+        log.debug('AFTERSUBMIT: Begin Parsing Lines');
 
         try{
             // Load record and get values

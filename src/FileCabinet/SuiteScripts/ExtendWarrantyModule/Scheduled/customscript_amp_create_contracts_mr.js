@@ -107,7 +107,7 @@ define([
 
         var stSerialNumber = '';
         var stOrderSku = '';
-        var flPurchasePrice = 0;
+        var flPurchasePrice = 0.00;
 
         // Loop through results and build context object containing all the necessary
         // data per line
@@ -142,9 +142,14 @@ define([
             // We should assess and convert these values
             stSerialNumber = stSerialNumber ? stSerialNumber : arrSearchResults[i].getValue({name: 'custcol_amp_ext_serial_number'});
             stOrderSku = stOrderSku ? stOrderSku : arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_sku'});
-            flPurchasePrice = flPurchasePrice ? flPurchasePrice : getSkuCost(stOrderSku);
+            if(stOrderSku){
+                flPurchasePrice = flPurchasePrice ? flPurchasePrice : getSkuCost(stOrderSku);
+            } else {
+                log.debug('Line Item' + i + 'does not have sku id. Skip this line:', stOrderId);
+                continue;
+            }
             var stOgOrderNumber = arrSearchResults[i].getValue({name: 'custcol_amp_ext_warranty_order_num'});
-            // var stOrderNumber = stOgOrderNumber ? stOgOrderNumber : arrSearchResults[i].getValue({name: 'tranid'});
+            var stOrderNumber = stOgOrderNumber ? stOgOrderNumber : arrSearchResults[i].getValue({name: 'tranid'});
             var objOrigOrderDate = arrSearchResults[i].getValue({name: 'custcol_amp_ext_original_order_date'});
             objTranDate = objOrigOrderDate ? objOrigOrderDate : objTranDate;
 
@@ -156,10 +161,10 @@ define([
             objResults[stKey].purchase_price = flPurchasePrice;
             objResults[stKey].currency = getCurrencyCode(arrSearchResults[i].getValue({name: 'currency'}));
             objResults[stKey].order_number = arrSearchResults[i].getValue({name: 'tranid'});
-            objResults[stKey].og_order_number = stOgOrderNumber;
+            objResults[stKey].og_order_number = stOrderNumber;
             objResults[stKey].serial_number = stSerialNumber;
             objResults[stKey].extend_plan_id = arrSearchResults[i].getValue({name: 'custitem_amp_ext_plan_id', join: 'item'});
-            objResults[stKey].extend_sku = stOrderSku 
+            objResults[stKey].extend_sku = stOrderSku.toUpperCase(); 
             objResults[stKey].line_amount = arrSearchResults[i].getValue({name: 'amount'});
             objResults[stKey].total_amount = arrSearchResults[i].getValue({name: 'total'});
             objResults[stKey].name = arrSearchResults[i].getText({name: 'entity'}).replace(/[0-9]/g, '');
@@ -271,6 +276,7 @@ define([
                 value: objValues.tran_date,
                 type: format.Type.DATE
             });
+            log.debug('objFormattedDate', objFormattedDate);
             // Write date from order
             objSalesOrder.setCurrentSublistValue({
                 sublistId: 'item',

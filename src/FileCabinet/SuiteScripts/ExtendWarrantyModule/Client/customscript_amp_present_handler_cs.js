@@ -31,9 +31,9 @@ function(){
         
         var stItemId = '';
         // Get line information from selected line
-        for(let i=0; i < planCount; i++){
+        for(var i=0; i < planCount; i++){
 
-            let isSelected = objCurrentRec.getSublistValue({
+            var isSelected = objCurrentRec.getSublistValue({
                 sublistId: 'custpage_plans', 
                 fieldId: 'custpage_select', 
                 line: i

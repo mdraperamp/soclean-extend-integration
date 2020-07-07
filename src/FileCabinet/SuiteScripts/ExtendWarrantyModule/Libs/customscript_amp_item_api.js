@@ -1,7 +1,7 @@
 /**
  * api.js
  * Houses calls to Extend API
- * @param NApiVersion 2.1
+ * @NApiVersion 2.1
  */
 define([
     'N/https',

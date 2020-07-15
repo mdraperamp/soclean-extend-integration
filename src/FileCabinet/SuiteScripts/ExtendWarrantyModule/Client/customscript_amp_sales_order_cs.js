@@ -106,7 +106,7 @@ function(url, search) {
             });
             log.debug('Item Lookup', arrFieldLookup);
 
-            // End of Group handling 
+            // End of Group handling
             if(!arrFieldLookup.hasOwnProperty('custitem_amp_ext_inv_sku') || !arrFieldLookup.hasOwnProperty('custitem_amp_is_warranty')){
                 continue;
             }

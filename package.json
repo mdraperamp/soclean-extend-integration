@@ -4,6 +4,7 @@
   "main": "suitecloud.config.js",
   "scripts": {
     "build-deploy": "suitecloud project:adddependencies && suitecloud project:validate && suitecloud project:deploy",
+    "validate": "suitecloud project:adddependencies && suitecloud project:validate",
     "deploy": "suitecloud project:deploy",
     "update": "suitecloud object:update -i"
   },

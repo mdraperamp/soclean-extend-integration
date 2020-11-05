@@ -10,4 +10,6 @@
  *@NApiVersion 2.1
  *@NScriptType Suitelet
  */
-define([], () =>{});
+define([], () =>{
+    //Example change
+});

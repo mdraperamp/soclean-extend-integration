@@ -53,10 +53,10 @@ define([
                         const arrSkuIds = arrFieldLookup.custitem_amp_ext_inv_sku;
                         const stContractId = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_contract_id', line: i}); 
                                             
-                        if(arrSkuIds.length > 1 && !stContractId){   
+                        if(arrSkuIds.length > 0 && !stContractId){   
                             log.debug('BEFORESUBMIT: Is a Warranty Order', objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'item', line: i}));
                             objNewRecord.setValue({fieldId: 'custbody_amp_ext_to_be_processed', value: true});
-                            
+                            objNewRecord.setValue({fieldId: 'custbody_so_with_ext_warr', value: 1});
                             // var stOgOrder = objNewRecord.getSublistValue({sublistId: 'item', fieldId: 'custcol_amp_ext_warranty_order_num', line: i});
                             // if(i == 0 && stItemLineCount > 1 && !stOgOrder){
                             //     //This is a kit
@@ -297,7 +297,7 @@ define([
                         }
                     }
                 // This is a warranty item assigned to LIVE skus
-                } else if(arrLookupIds.length > 1){
+                } else if(arrLookupIds.length > 0){
 
                     var stQuant = objSalesOrder.getSublistValue({
                         sublistId: 'item',

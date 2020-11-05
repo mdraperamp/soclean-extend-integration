@@ -200,7 +200,11 @@ define([
         var objJSON = {
             'transactionId': objValues.id,
             'transactionDate': stTranDate.getTime() / 1000,
-            'transactionTotal': objValues.total_amount.replace('.', ''),
+            // 'transactionTotal': objValues.total_amount.replace('.', ''),
+            'transactionTotal': {
+                'currencyCode' : objValues.currency,
+                'amount': objValues.total_amount.replace('.', '')
+            },
             'currency' : objValues.currency,
             'poNumber': objValues.order_number,
             'customer': {

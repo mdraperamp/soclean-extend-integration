@@ -42,6 +42,9 @@ define([
 
         const request = context.request;
         const planCount = request.getLineCount({group: 'custpage_plans'});
+
+        //Line Number
+        const intLineNumber = request.getFieldValue({fieldId: 'custpage_line_num'});
         
         var stItemId = '';
         // Get line information from selected line
@@ -62,6 +65,8 @@ define([
         html += ' <script language="JavaScript">';
         html += ' if(window.opener) {';
         html += ` window.opener.nlapiSetCurrentLineItemValue("item", "item", ${stItemId}, true, true);`;
+        //`window.opener.nlapiSetLineItemValue("item", "custcol_sc_warranty_link", ${stItemId}, intLineNumber - 1, true, true);`
+        //`window.opener.nlapiSetLineItemValue("item", "item", ${stItemId}, intLineNumber, true, true);`
         html += ' };';
         html += ' window.close();';
         html += ' </script>';
@@ -89,6 +94,15 @@ define([
         var objForm = ui.createForm({
             title: 'Extend Warranty Plans',
             hideNavBar: true
+        });
+        //Hidden field of line number
+        var objLineNumField = objForm.addField({
+            id: 'custpage_line_num',
+            type: ui.FieldType.INTEGER,
+            label: 'Line Number'
+        });
+        objLineNumField.updateDisplayType({
+            displayType: ui.FieldDisplayType.HIDDEN
         });
         // Add plans sublist
         var objPlanList = objForm.addSublist({

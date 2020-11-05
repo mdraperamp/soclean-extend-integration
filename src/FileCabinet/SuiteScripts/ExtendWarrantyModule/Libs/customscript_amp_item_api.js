@@ -21,7 +21,7 @@ define(['N/https', '../Libs/customscript_amp_lib_keys'], (https, config) => {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          'X-Extend-Access-Token': config.key,
+          'X-Extend-Access-Token': config.key
         },
         body: JSON.stringify(objProductDetails),
       });
@@ -124,6 +124,7 @@ define(['N/https', '../Libs/customscript_amp_lib_keys'], (https, config) => {
           Accept: 'application/json',
           'Content-Type': 'application/json',
           'X-Extend-Access-Token': config.key,
+          'Accept': 'application/json:version=2020-08-01'
         },
         body: JSON.stringify(objContractDetails),
       });

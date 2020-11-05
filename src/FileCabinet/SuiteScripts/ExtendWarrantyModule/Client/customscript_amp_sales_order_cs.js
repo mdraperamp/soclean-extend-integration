@@ -28,7 +28,7 @@ function(url, search) {
         }
 
         if(typeof objEventRouter[context.sublistId] !== 'function'){
-            return;
+            return true;
         }
 
         objEventRouter[context.sublistId](context);
@@ -52,6 +52,9 @@ function(url, search) {
             sublistId: context.sublistId,
             fieldId: 'item'
         });
+        const stLineNum = objCurrentRecord.getCurrentSublistIndex({
+            sublistId: context.sublistId
+        });
 
         var bIsWarranty = false;
         // Lookup to item to see if it is eligible for warranty offers
@@ -74,7 +77,8 @@ function(url, search) {
             scriptId: 'customscript_amp_select_warranty_sl',
             deploymentId: 'customdeploy_amp_select_warranty_sl',
             params: {
-                'stItemInternalId' : stItemId
+                'stItemInternalId' : stItemId,
+                'stLineNum': stLineNum
             }
         });
 
